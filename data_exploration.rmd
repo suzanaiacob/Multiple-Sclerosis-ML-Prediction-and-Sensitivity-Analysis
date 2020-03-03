@@ -1,0 +1,421 @@
+---
+title: "Analytics Edge - Homework 5"
+subtitle: "El Ghali A. Zerhouni"
+output: pdf_document
+---
+
+This file contains the data import and cleaning. Since I am not uploading the original study files this file cannot be run as is, and I am including it here for completness purposes. 
+
+```{r setup, include=FALSE}
+library(dplyr)
+library(rpart)
+library(gbm)
+```
+
+
+```{r import}
+#Import of data
+probability = read.csv("386005647/probabilities.csv")
+
+```
+
+```{r import}
+#Import of data
+utilities = read.csv("386005647/utilities.csv")
+
+```
+
+```{r import}
+#Import of data
+exp_utilities = read.csv("386005647/expected_utilities.csv")
+
+```
+
+
+```{r import}
+#Import of data
+pref_rate = read.csv("386005647/preference_rates.csv")
+
+```
+
+
+```{r import}
+#Import of data
+test = read.csv("imunochip/ImmunoChip_Results/Immunochip_FinalResults_LimitedDiscovery.csv")
+
+```
+
+
+```{r import}
+### Calculation of the best treatment - creation of probabilty matrices for each side effect and treatment
+### Note that the probability contains 10000 scenarios for 16 possible combinations of probability distribution and background.risk.proportion
+### This makes the table of size 160,000 rows
+
+ind_HD = c()
+for (i in 0:41){
+    ind_HD = c(ind_HD,3*i+3 )
+}
+
+ind_LD = c()
+for (i in 0:41){
+    ind_LD = c(ind_LD,3*i+4)
+}
+
+ind_NT = c()
+for (i in 0:41){
+    ind_NT = c(ind_NT,3*i+5)
+}
+  
+proba_HD = probability[,ind_HD]
+proba_LD = probability[,ind_LD]
+proba_NT = probability[,ind_NT]
+
+names <- colnames(utilities)[3:58]
+
+names <- c("Distribution", "Background.risk.proportion",names)
+
+#######################
+#### High Dose
+######################
+
+
+proba_HD_computed = data.frame(proba_HD[1])
+
+third_layer_ind = c(2,2,3,3,3,3,2,1,1,2,3,3)
+
+i = 1
+  for (j in 3:14){
+        third_layer = third_layer_ind[j-2]
+        for (k in 1:third_layer){
+              data_loop = data.frame(proba_HD[i]*proba_HD[j]*proba_HD[14+k])
+              proba_HD_computed <- data.frame(proba_HD_computed,data_loop)
+         }
+  }
+i = 2
+  for (j in 3:14){
+        third_layer = third_layer_ind[j-2]
+        for (k in 1:third_layer){
+              data_loop = data.frame(proba_HD[i]*proba_HD[j]*proba_HD[14+k])
+              proba_HD_computed <- data.frame(proba_HD_computed,data_loop)
+         }
+  }
+
+
+exclude <- colnames(proba_HD_computed)[1]
+
+proba_HD_computed <- proba_HD_computed %>%
+  select(-exclude)
+
+
+proba_HD_computed <- data.frame(data.frame(probability$Distribution),data.frame(probability$Background.risk.proportion), proba_HD_computed )
+
+
+
+colnames(proba_HD_computed) <- names
+
+#######################
+#### Low Dose
+######################
+
+
+proba_LD_computed = data.frame(proba_LD[1])
+
+
+
+third_layer_ind = c(2,2,3,3,3,3,2,1,1,2,3,3)
+
+i = 1
+  for (j in 3:14){
+        third_layer = third_layer_ind[j-2]
+        for (k in 1:third_layer){
+               data_loop = data.frame(proba_LD[i]*proba_LD[j]*proba_LD[14+k])
+              proba_LD_computed <- data.frame(proba_LD_computed,data_loop)
+         }
+  }
+i = 2
+  for (j in 3:14){
+        third_layer = third_layer_ind[j-2]
+        for (k in 1:third_layer){
+              data_loop = data.frame(proba_LD[i]*proba_LD[j]*proba_LD[14+k])
+              proba_LD_computed <- data.frame(proba_LD_computed,data_loop)
+         }
+  }
+
+
+exclude <- colnames(proba_LD_computed)[1]
+
+proba_LD_computed <- proba_LD_computed %>%
+  select(-exclude)
+
+
+
+proba_LD_computed <- data.frame(data.frame(probability$Distribution),data.frame(probability$Background.risk.proportion), proba_LD_computed )
+
+
+colnames(proba_LD_computed) <- names
+
+#######################
+#### No treatment
+######################
+
+proba_NT_computed = data.frame(proba_NT[1])
+
+
+
+third_layer_ind = c(2,2,3,3,3,3,2,1,1,2,3,3)
+
+i = 1
+  for (j in 3:14){
+        third_layer = third_layer_ind[j-2]
+        for (k in 1:third_layer){
+              data_loop = data.frame(proba_NT[i]*proba_NT[j]*proba_NT[14+k])
+              proba_NT_computed <- data.frame(proba_NT_computed,data_loop)
+         }
+  }
+i = 2
+  for (j in 3:14){
+        third_layer = third_layer_ind[j-2]
+        for (k in 1:third_layer){
+              data_loop = data.frame(proba_NT[i]*proba_NT[j]*proba_NT[14+k])
+              proba_NT_computed <- data.frame(proba_NT_computed,data_loop)
+         }
+  }
+
+
+exclude <- colnames(proba_NT_computed)[1]
+
+proba_NT_computed <- proba_NT_computed %>%
+  select(-exclude)
+
+proba_NT_computed <- data.frame(data.frame(probability$Distribution),data.frame(probability$Background.risk.proportion), proba_NT_computed )
+
+
+colnames(proba_NT_computed) <- names
+
+
+```
+
+
+```{r excpected utilities}
+### There 42 possible possibilities for utilies based on the relapse severity (2 possibilities) and the min utility difference between lethal and non lethal (21 possibilities)
+### Hence we have to calculate the best tratment for each of the 10000 patients for each of the 16 sceenarios of probabilities and 42 scenatios of utilies
+### Which leads to a matrix of size 10000x16x42
+
+
+###############################################
+##### TEST FOR ONE SCENARIO
+###############################################
+
+
+##### High dose
+matrix_utility_scenario_HD1 = data.frame(matrix(ncol = 60))
+colnames(matrix_utility_scenario_HD1) <- c("Relapse.severity", "Minimum.utility.difference.lethal.vs.non.lethal.outcomes", names)
+j = 1
+matrix_prob_uti_scenario = data.frame(matrix(ncol = 60))
+colnames(matrix_prob_uti_scenario) <- c("Relapse.severity", "Minimum.utility.difference.lethal.vs.non.lethal.outcomes", names)
+for (i in 1:42){
+        matrix_prob_uti_scenario_loop = utilities[(1+10000*(i-1)):(10000*(i)),3:58]*proba_HD_computed[(1+10000*(j-1)):(10000*(j)),3:58]
+        scenario = data.frame(data.frame(utilities[(1+10000*(i-1)):(10000*(i)),1:2]), data.frame(proba_HD_computed[(1+10000*(j-1)):(10000*(j)),1:2]))
+        matrix_prob_uti_scenario_loop = data.frame(scenario, matrix_prob_uti_scenario_loop)
+        matrix_prob_uti_scenario = rbind(matrix_prob_uti_scenario,matrix_prob_uti_scenario_loop)
+}
+matrix_prob_uti_scenario = matrix_prob_uti_scenario[-1,]
+matrix_utility_scenario_HD1 = rbind(matrix_utility_scenario_HD1, matrix_prob_uti_scenario)
+
+matrix_utility_scenario_HD1 = matrix_utility_scenario_HD1[-1,]
+
+write.csv(matrix_utility_scenario_HD1, "matrix_utility_scenario_HD1.csv")
+
+
+
+##### Low dose
+matrix_utility_scenario_LD1 = data.frame(matrix(ncol = 60))
+colnames(matrix_utility_scenario_LD1) <- c("Relapse.severity", "Minimum.utility.difference.lethal.vs.non.lethal.outcomes", names)
+j = 1
+matrix_prob_uti_scenario = data.frame(matrix(ncol = 60))
+colnames(matrix_prob_uti_scenario) <- c("Relapse.severity", "Minimum.utility.difference.lethal.vs.non.lethal.outcomes", names)
+for (i in 1:42){
+        matrix_prob_uti_scenario_loop = utilities[(1+10000*(i-1)):(10000*(i)),3:58]*proba_LD_computed[(1+10000*(j-1)):(10000*(j)),3:58]
+        scenario = data.frame(data.frame(utilities[(1+10000*(i-1)):(10000*(i)),1:2]), data.frame(proba_LD_computed[(1+10000*(j-1)):(10000*(j)),1:2]))
+        matrix_prob_uti_scenario_loop = data.frame(scenario, matrix_prob_uti_scenario_loop)
+        matrix_prob_uti_scenario = rbind(matrix_prob_uti_scenario,matrix_prob_uti_scenario_loop)
+}
+matrix_prob_uti_scenario = matrix_prob_uti_scenario[-1,]
+matrix_utility_scenario_LD1 = rbind(matrix_utility_scenario_LD1, matrix_prob_uti_scenario)
+
+matrix_utility_scenario_LD1 = matrix_utility_scenario_LD1[-1,]
+
+write.csv(matrix_utility_scenario_LD1, "matrix_utility_scenario_LD1.csv")
+
+
+##### no treatment
+matrix_utility_scenario_NT1 = data.frame(matrix(ncol = 60))
+colnames(matrix_utility_scenario_NT1) <- c("Relapse.severity", "Minimum.utility.difference.lethal.vs.non.lethal.outcomes", names)
+j = 1
+matrix_prob_uti_scenario = data.frame(matrix(ncol = 60))
+colnames(matrix_prob_uti_scenario) <- c("Relapse.severity", "Minimum.utility.difference.lethal.vs.non.lethal.outcomes", names)
+for (i in 1:42){
+        matrix_prob_uti_scenario_loop = utilities[(1+10000*(i-1)):(10000*(i)),3:58]*proba_NT_computed[(1+10000*(j-1)):(10000*(j)),3:58]
+        scenario = data.frame(data.frame(utilities[(1+10000*(i-1)):(10000*(i)),1:2]), data.frame(proba_NT_computed[(1+10000*(j-1)):(10000*(j)),1:2]))
+        matrix_prob_uti_scenario_loop = data.frame(scenario, matrix_prob_uti_scenario_loop)
+        matrix_prob_uti_scenario = rbind(matrix_prob_uti_scenario,matrix_prob_uti_scenario_loop)
+}
+matrix_prob_uti_scenario = matrix_prob_uti_scenario[-1,]
+matrix_utility_scenario_NT1 = rbind(matrix_utility_scenario_NT1, matrix_prob_uti_scenario)
+
+matrix_utility_scenario_NT1 = matrix_utility_scenario_NT1[-1,]
+
+write.csv(matrix_utility_scenario_NT1, "matrix_utility_scenario_NT1.csv")
+
+
+```
+
+```{r utilities calculation}
+
+### Sum of all the utilities
+
+HD_global_utility <- data.frame(rowSums(matrix_utility_scenario_HD1[,5:60]))
+colnames(HD_global_utility) <- "HD_global_utility"
+
+
+LD_global_utility <- data.frame(rowSums(matrix_utility_scenario_LD1[,5:60]))
+colnames(LD_global_utility) <- "LD_global_utility"
+
+NT_global_utility <- data.frame(rowSums(matrix_utility_scenario_NT1[,5:60]))
+colnames(NT_global_utility) <- "NT_global_utility"
+
+
+```
+
+```{r global utility matrix}
+
+utility_scenario <- matrix_utility_scenario_HD1[,1:4]
+
+
+utilities_scenario1 <- cbind(utility_scenario, utilities[,3:58] )
+
+utilities_scenario1 <- cbind(utilities_scenario1, HD_global_utility)
+
+utilities_scenario1 <- cbind(utilities_scenario1, LD_global_utility)
+
+utilities_scenario1 <- cbind(utilities_scenario1, NT_global_utility)
+
+
+```
+
+
+```{r classification}
+
+best_treatment <- c()
+
+for (j in 1:420000){
+  utilities_loop <- c(HD_global_utility[j,1], LD_global_utility[j,1], NT_global_utility[j,1])
+  best_treatment <- c(best_treatment, which.max(utilities_loop))
+}
+
+
+```
+
+```{r classification}
+
+
+best_treatment_frame <- data.frame(best_treatment)
+colnames(best_treatment_frame) <- "best_treatmemt"
+
+utilities_scenario1 <- cbind(utilities_scenario1, best_treatment_frame)
+
+write.csv(matrix_utility_scenario_NT1, "utilities_scenario1.csv")
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r global scenarios}
+
+
+matrix_utility_scenario_HD = data.frame(matrix(ncol = 60))
+colnames(matrix_utility_scenario_HD) <- c("Relapse.severity", "Minimum.utility.difference.lethal.vs.non.lethal.outcomes", names)
+for (i in 1:42){
+    matrix_prob_uti_scenario = data.frame(matrix(ncol = 60))
+    colnames(matrix_prob_uti_scenario) <- c("Relapse.severity", "Minimum.utility.difference.lethal.vs.non.lethal.outcomes", names)
+      for (j in 1:16){
+        matrix_prob_uti_scenario_loop = utilities[(1+10000*(i-1)):(10000*(i)),3:58]*proba_HD_computed[(1+10000*(j-1)):(10000*(j)),3:58]
+        scenario = data.frame(data.frame(utilities[(1+10000*(i-1)):(10000*(i)),1:2]), data.frame(proba_HD_computed[(1+10000*(j-1)):(10000*(j)),1:2]))
+        matrix_prob_uti_scenario_loop = data.frame(scenario, matrix_prob_uti_scenario_loop)
+        matrix_prob_uti_scenario = rbind(matrix_prob_uti_scenario,matrix_prob_uti_scenario_loop)
+      }
+    matrix_prob_uti_scenario = matrix_prob_uti_scenario[-1,]
+    matrix_utility_scenario_HD = rbind(matrix_utility_scenario_HD, matrix_prob_uti_scenario)
+}
+matrix_utility_scenario_HD = matrix_utility_scenario_HD[-1,]
+
+write.csv(matrix_utility_scenario_HD, "matrix_utility_scenario_HD.csv")
+
+
+matrix_utility_scenario_LD = data.frame(matrix(ncol = 60))
+colnames(matrix_utility_scenario_LD) <- c("Relapse.severity", "Minimum.utility.difference.lethal.vs.non.lethal.outcomes", names)
+for (i in 1:42){
+    matrix_prob_uti_scenario = data.frame(matrix(ncol = 60))
+    colnames(matrix_prob_uti_scenario) <- c("Relapse.severity", "Minimum.utility.difference.lethal.vs.non.lethal.outcomes", names)
+      for (j in 1:16){
+        matrix_prob_uti_scenario_loop = utilities[(1+10000*(i-1)):(10000*(i)),3:58]*proba_LD_computed[(1+10000*(j-1)):(10000*(j)),3:58]
+        scenario = data.frame(data.frame(utilities[(1+10000*(i-1)):(10000*(i)),1:2]), data.frame(proba_LD_computed[(1+10000*(j-1)):(10000*(j)),1:2]))
+        matrix_prob_uti_scenario_loop = data.frame(scenario, matrix_prob_uti_scenario_loop)
+        matrix_prob_uti_scenario = rbind(matrix_prob_uti_scenario,matrix_prob_uti_scenario_loop)
+        matrix_prob_uti_scenario = matrix_prob_uti_scenario[-1,]
+      }
+  matrix_utility_scenario_LD = rbind(matrix_utility_scenario_LD, matrix_prob_uti_scenario)
+}
+
+write.csv(matrix_utility_scenario_LD, "matrix_utility_scenario_LD.csv")
+
+
+
+
+matrix_utility_scenario_NT = data.frame(matrix(ncol = 60))
+colnames(matrix_utility_scenario_NT) <- c("Relapse.severity", "Minimum.utility.difference.lethal.vs.non.lethal.outcomes", names)
+for (i in 1:42){
+    matrix_prob_uti_scenario = data.frame(matrix(ncol = 60))
+    colnames(matrix_prob_uti_scenario) <- c("Relapse.severity", "Minimum.utility.difference.lethal.vs.non.lethal.outcomes", names)
+      for (j in 1:16){
+        matrix_prob_uti_scenario_loop = utilities[(1+10000*(i-1)):(10000*(i)),3:58]*proba_NT_computed[(1+10000*(j-1)):(10000*(j)),3:58]
+        scenario = data.frame(data.frame(utilities[(1+10000*(i-1)):(10000*(i)),1:2]), data.frame(proba_NT_computed[(1+10000*(j-1)):(10000*(j)),1:2]))
+        matrix_prob_uti_scenario_loop = data.frame(scenario, matrix_prob_uti_scenario_loop)
+        matrix_prob_uti_scenario = rbind(matrix_prob_uti_scenario,matrix_prob_uti_scenario_loop)
+        matrix_prob_uti_scenario = matrix_prob_uti_scenario[-1,]
+      }
+  matrix_utility_scenario_NT = rbind(matrix_utility_scenario_NT, matrix_prob_uti_scenario)
+}
+
+write.csv(matrix_utility_scenario_NT, "matrix_utility_scenario_NT.csv")
+
+
+```
+
+```{r}
+exp_utility_HD <- read.csv("exp_utility_HD.csv")
+exp_utility_LD <- read.csv("exp_utility_LD.csv")
+exp_utility_NT <- read.csv("exp_utility_NT.csv")
+
+
+```
+
+

@@ -1,0 +1,120 @@
+
+---
+title: "ML Project"
+author: "Suzana Iacob"
+date: "21/11/2019"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE, message=FALSE)
+library(dplyr)
+library(rpart)
+library(rpart.plot)
+library(caTools)
+library(caret) 
+library(gbm)
+library(glmnet)
+library(randomForest) 
+library(matrixStats)
+library(dplyr)
+library(cvar)
+library(caret)
+library(glmnet)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(lars)
+library(leaps)
+library(gbm)
+library(randomForest) 
+library(rpart) 
+library(ggplot2)
+library(rpart.plot)
+library(caTools)
+library(caret)
+library(gbm)
+library(ROCR)
+```
+
+## Import Processed Data
+
+
+```{r import}
+utilities_train <- read.csv("utilities_s1_d1_train.csv")
+utilities_test <- read.csv("utilities_s1_d1_test.csv")
+global_utilities <- rbind(utilities_train,utilities_test )
+utilities_train$best_treatment = as.factor(utilities_train$best_treatment)
+utilities_test$best_treatment = as.factor(utilities_test$best_treatment)
+table(utilities_train$best_treatment)
+```
+
+## Model
+
+```{r model}
+utilities_tree = rpart(best_treatment ~., data=utilities_train,cp=0.002, minbucket=10, method="class")
+prp(utilities_tree, digits = 0, varlen = 0, faclen = 0)
+```
+
+
+```{r prediction}
+prediction = predict(utilities_tree, newdata = utilities_test, type="class")
+matrix = table(utilities_test$best_treatment, prediction)
+matrix
+```
+
+Prediction accuracy
+
+
+```{r accuracy}
+# First tree
+print((matrix[1,1]+matrix[2,2]+matrix[3,3])/nrow(utilities_test))
+```
+
+
+# Cross Validation
+
+```{r }
+PenaltyMatrix = matrix(c(0,1,1.5,2,0,2,1,2,0), byrow=TRUE, nrow=3)
+cpVals <- data.frame(.cp = seq(.0001, .01, by=.0001))
+set.seed(123)
+cpCV = train(best_treatment~.,
+             trControl=trainControl(method="cv",number=10), data=utilities_train,method="rpart",minbucket=35,
+             tuneGrid=cpVals, metric="Accuracy", maximize=TRUE,parms=list(loss=PenaltyMatrix))
+```
+
+```{r}
+ggplot(cpCV$results, aes(x=cp, y=Accuracy)) +
+  geom_line() +
+  theme_bw() +
+  xlab("cp parameter") +
+  ylab("Cross-validated Accuracy") 
+```
+
+
+```{r}
+best.cp = cpCV$bestTune
+print(best.cp)
+```
+
+```{r}
+utilities_tree_cv <- rpart(best_treatment ~ ., data=utilities_test, minbucket = 35, cp=0.0025, parms=list(loss=PenaltyMatrix))
+prp(utilities_tree_cv)
+```
+
+```{r }
+prediction = predict(utilities_tree_cv, newdata = utilities_test, type="class")
+matrix_cv = table(utilities_test$best_treatment, prediction)
+matrix_cv
+```
+
+```{r }
+# First tree
+print((matrix_cv[1,1]+matrix_cv[2,2]+matrix_cv[3,3])/nrow(utilities_test))
+```
+
+
+
+
