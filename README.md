@@ -1,6 +1,6 @@
 # Multiple Sclerosis ML Prediction and Sensitivity-Analysis
 
-This is my MIT Project for the course Machine Learning Under a Modern Optimization Lens, taught by the Associate Dean for Business Analytics at MIT, Dr. Dimitris Bertsimas. This project was completed in collaboration with my MIT colleague El Ghali Ahmed Zerhouni (egaz @ mit.edu ). We submitted this for our final project and received a grade of A :) 
+This is my MIT Project for the course Machine Learning Under a Modern Optimization Lens, taught by the Associate Dean for Business Analytics at MIT, Dr. Dimitris Bertsimas. This project was completed in collaboration with my MIT colleague El Ghali Ahmed Zerhouni. We submitted this for our final project and received a grade of A :) 
 
 The project was open-ended, we were tasked with using any methods on any problem of our choice.
 
